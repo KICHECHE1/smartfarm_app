@@ -1,3 +1,15 @@
+## Features
+
+- Weather Integration: Live weather forecasts and seasonal predictions
+	- **Status:** Placeholder UI added in `app/page.tsx`. Actual weather data integration coming soon.
+- Soil Health Analysis: Data from sensors or user input to assess soil fertility
+	- **Status:** Placeholder UI added in `app/page.tsx`. Actual soil data integration coming soon.
+- Soil Health Analysis: Data from sensors or user input to assess soil fertility
+- Crop Advisory: Suggestions on what crops to plant based on location and season
+- Planting & Irrigation Schedule: Timely reminders for watering, fertilizing, and harvesting
+- Pest & Disease Alerts: Notifications based on local outbreak data or image uploads
+- Farm Dashboard: Visualization of farm performance, productivity, and resource use
+- Chatbot / Expert Advice: AI-powered or human-assisted consultation for farmers
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
