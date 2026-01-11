@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 
 
 export default function WeatherPage() {
-  const API_KEY = "7e52e8bf1a85baf1697388705b0fa3b3";
+  // No API key needed for Open-Meteo
   const DEFAULT_LOCATION = { lat: 1.015, lon: 35.006 };
   const [manualCity, setManualCity] = useState("");
   const [isManual, setIsManual] = useState(false);
@@ -23,14 +23,14 @@ export default function WeatherPage() {
       const name = localStorage.getItem("sf_user_fullName");
       if (loc) setLocationName(loc);
       if (name) setUserName(name);
-      // If location is a city string, try to geocode it
+      // If location is a city string, try to geocode it using Open-Meteo
       if (loc && isNaN(Number(loc))) {
-        fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(loc)}&limit=1&appid=${API_KEY}`)
+        fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(loc)}&count=1&language=en&format=json`)
           .then(res => res.json())
           .then(data => {
-            if (data && data.length > 0) {
-              setLocation({ lat: data[0].lat, lon: data[0].lon });
-              setLocationName(`${data[0].name}${data[0].country ? ", " + data[0].country : ""}`);
+            if (data && data.results && data.results.length > 0) {
+              setLocation({ lat: data.results[0].latitude, lon: data.results[0].longitude });
+              setLocationName(`${data.results[0].name}${data.results[0].country ? ", " + data.results[0].country : ""}`);
             }
           });
       }
@@ -56,14 +56,21 @@ export default function WeatherPage() {
         let lat = location.lat;
         let lon = location.lon;
         let locName = locationName;
+        // If manual city, geocode using Open-Meteo's geocoding API
         if (isManual && manualCity) {
-          // Geocode city name
-          const geoRes = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${manualCity}&limit=1&appid=${API_KEY}`);
+          const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(manualCity)}&count=1&language=en&format=json`);
+          if (!geoRes.ok) {
+            const text = await geoRes.text();
+            console.error('Geocode fetch failed:', geoRes.status, text);
+            setError(`Geocode error: ${geoRes.status}`);
+            setLoading(false);
+            return;
+          }
           const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-            lat = geoData[0].lat;
-            lon = geoData[0].lon;
-            locName = `${geoData[0].name}${geoData[0].country ? ", " + geoData[0].country : ""}`;
+          if (geoData && geoData.results && geoData.results.length > 0) {
+            lat = geoData.results[0].latitude;
+            lon = geoData.results[0].longitude;
+            locName = `${geoData.results[0].name}${geoData.results[0].country ? ", " + geoData.results[0].country : ""}`;
             setLocation({ lat, lon });
             setLocationName(locName);
           } else {
@@ -72,23 +79,35 @@ export default function WeatherPage() {
             return;
           }
         }
-        // Current weather
-        const resCurrent = await fetch(
-          `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`
-        );
-        const dataCurrent = await resCurrent.json();
-        if (!isManual && dataCurrent.name) {
-          setLocationName(`${dataCurrent.name}${dataCurrent.sys && dataCurrent.sys.country ? ", " + dataCurrent.sys.country : ""}`);
+        // Fetch current weather and 7-day forecast from Open-Meteo
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode&forecast_days=7&timezone=auto`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('Open-Meteo fetch failed:', res.status, text);
+          setError(`Weather error: ${res.status}`);
+          setLoading(false);
+          return;
         }
-        // 7-day forecast
-        const resForecast = await fetch(
-          `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`
-        );
-        const dataForecast = await resForecast.json();
-        setWeather(dataCurrent);
-        setForecast(dataForecast.daily.slice(0, 7));
+        const data = await res.json();
+        // Map Open-Meteo data to expected format
+        setWeather({
+          main: { temp: data.current_weather.temperature },
+          weather: [{ description: `Code ${data.current_weather.weathercode}`, icon: "01d" }],
+          wind: { speed: data.current_weather.windspeed },
+          rain: { "1h": data.daily.precipitation_sum[0] || 0 },
+        });
+        // Build forecast array
+        const forecastArr = Array.from({ length: 7 }).map((_, i) => ({
+          dt: Math.floor(new Date(data.daily.time[i]).getTime() / 1000),
+          temp: { day: data.daily.temperature_2m_max[i], min: data.daily.temperature_2m_min[i], max: data.daily.temperature_2m_max[i] },
+          rain: data.daily.precipitation_sum[i],
+          weather: [{ main: data.daily.weathercode[i] === 61 || data.daily.weathercode[i] === 63 ? "Rain" : data.daily.weathercode[i] === 0 ? "Clear" : "Clouds" }],
+        }));
+        setForecast(forecastArr);
         setLoading(false);
       } catch (err) {
+        console.error('Weather fetch error:', err);
         setError("Failed to fetch weather data.");
         setLoading(false);
       }
